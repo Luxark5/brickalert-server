@@ -31,11 +31,29 @@ app.get('/auth', async (req, res) => {
         mlToken = data.access_token;
         console.log('✅ Token ML obtenido via OAuth');
         
-        // Redirigir de vuelta a la app
-        res.redirect(`brickalert://auth?token=${mlToken}`);
+        res.send(`
+            <html>
+            <body style="font-family:sans-serif;padding:20px;background:#1a1a1a;color:white;">
+                <h2>✅ BrickAlert conectado!</h2>
+                <p>Copia este token:</p>
+                <textarea style="width:100%;height:100px;background:#333;color:yellow;padding:10px;">${mlToken}</textarea>
+                <br><br>
+                <a href="brickalert://auth?token=${mlToken}" style="background:yellow;color:black;padding:15px;border-radius:10px;text-decoration:none;font-weight:bold;">
+                    Abrir BrickAlert
+                </a>
+            </body>
+            </html>
+        `);
     } catch (e) {
-        console.log('Error OAuth:', e.message);
-        res.status(500).json({ error: 'Error obteniendo token' });
+        console.log('Error OAuth:', e.response?.data || e.message);
+        res.status(500).send(`
+            <html>
+            <body style="font-family:sans-serif;padding:20px;background:#1a1a1a;color:white;">
+                <h2>❌ Error de conexión</h2>
+                <p>${e.response?.data?.message || e.message}</p>
+            </body>
+            </html>
+        `);
     }
 });
 
@@ -65,12 +83,9 @@ async function obtenerPrecios(numeroSet) {
     const resultados = {
         numeroSet,
         mercadoLibre: null,
-        legoOficial: null,
-        juguetron: null,
         timestamp: new Date().toISOString()
     };
 
-    // Mercado Libre con token OAuth
     if (mlToken) {
         try {
             const url = `https://api.mercadolibre.com/sites/MLM/search?q=lego+${numeroSet}&limit=5`;
