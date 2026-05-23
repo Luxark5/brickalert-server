@@ -7,7 +7,6 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-
 let productos = [];
 
 app.get('/', (req, res) => {
@@ -16,9 +15,8 @@ app.get('/', (req, res) => {
 
 app.post('/productos', (req, res) => {
   const { id, nombre, numeroSet } = req.body;
-  const existe = productos.find(p => p.id === id);
-  if (!existe) {
-    productos.push({ id, nombre, numeroSet, precios: {} });
+  if (!productos.find(p => p.id === id)) {
+    productos.push({ id, nombre, numeroSet });
   }
   res.json({ ok: true });
 });
@@ -37,24 +35,75 @@ async function obtenerPrecios(numeroSet) {
   const resultados = {
     numeroSet,
     mercadoLibre: null,
+    legoOficial: null,
+    juguetron: null,
     timestamp: new Date().toISOString()
   };
+
+  // Mercado Libre
   try {
-    const url = `https://api.mercadolibre.com/sites/MLM/search?q=lego+${numeroSet}&limit=1`;
+    const url = `https://api.mercadolibre.com/sites/MLM/search?q=lego+${numeroSet}&limit=3`;
     const { data } = await axios.get(url, { timeout: 10000 });
     if (data.results && data.results.length > 0) {
-      const item = data.results[0];
-      if (item.title.toLowerCase().includes('lego')) {
+      const legos = data.results.filter(i => i.title.toLowerCase().includes('lego'));
+      if (legos.length > 0) {
+        const item = legos[0];
         resultados.mercadoLibre = {
           precio: item.price,
           url: item.permalink,
-          titulo: item.title
+          titulo: item.title,
+          enStock: item.available_quantity > 0
         };
       }
     }
   } catch (e) {
     console.log('Error ML:', e.message);
   }
+
+  // LEGO Oficial MX
+  try {
+    const url = `https://www.lego.com/es-mx/search?q=${numeroSet}`;
+    const { data } = await axios.get(url, {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const $ = cheerio.load(data);
+    const precio = $('[data-test="product-leaf-price"]').first().text().trim();
+    const titulo = $('[data-test="product-leaf-title"]').first().text().trim();
+    if (precio) {
+      resultados.legoOficial = {
+        precio: parseFloat(precio.replace(/[^0-9.]/g, '')),
+        url: `https://www.lego.com/es-mx/search?q=${numeroSet}`,
+        titulo: titulo || `LEGO ${numeroSet}`,
+        enStock: true
+      };
+    }
+  } catch (e) {
+    console.log('Error LEGO:', e.message);
+  }
+
+  // Juguetron
+  try {
+    const url = `https://lego.juguetron.mx/search?q=${numeroSet}`;
+    const { data } = await axios.get(url, {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const $ = cheerio.load(data);
+    const precio = $('.price').first().text().trim();
+    const titulo = $('.product-title').first().text().trim();
+    if (precio) {
+      resultados.juguetron = {
+        precio: parseFloat(precio.replace(/[^0-9.]/g, '')),
+        url: `https://lego.juguetron.mx/search?q=${numeroSet}`,
+        titulo: titulo || `LEGO ${numeroSet}`,
+        enStock: true
+      };
+    }
+  } catch (e) {
+    console.log('Error Juguetron:', e.message);
+  }
+
   return resultados;
 }
 
